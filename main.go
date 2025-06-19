@@ -19,7 +19,7 @@ type Config struct {
 	TablesSkip []string `env:"TABLE_MAP" envSeparator:":"`
 	TmpDir     string   `env:"TMP_DIR"`
 	output   string   `env:"OUTPUT_DIR" envDefault:"./output"`
-	tokenSize int   `env:"TOKEN_SIZE" envDefault:"65536"` // Размер буфера для чтения строк
+	tokenSize int   `env:"TOKEN_SIZE" envDefault:"65536"` // buffer size for reading lines, default 64 KB
 }
 
 func main() {
@@ -99,7 +99,7 @@ func filtrateDump() error {
 	}
 
 	defer os.RemoveAll(tmpDir)
-	fmt.Printf("✅ Новый архив: %s\n", outputTarGz)
+	fmt.Printf("✅ New archive: %s\n", outputTarGz)
 	return nil
 }
 
@@ -166,7 +166,7 @@ func insertFilter(r io.Reader, w io.Writer, skipTables []string, bufferSize int)
 		return fmt.Errorf("scanner: %w", err)
 	}
 
-	fmt.Printf("✅ Пропущено строк: %d из %d\n", filteredLines, totalLines)
+	fmt.Printf("✅ Skipped lines: %d из %d\n", filteredLines, totalLines)
 	return nil
 }
 
