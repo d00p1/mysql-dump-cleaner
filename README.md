@@ -61,5 +61,7 @@ To keep the output archive, it is copied outside the temporary folder before cle
 
 - Add more CLI flags and dynamic configuration.
 
+- Make cli-utility for inside docker containiers use 
+
 ### 📜 License
 MIT — free for personal and commercial use.
