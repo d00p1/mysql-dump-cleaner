@@ -16,6 +16,7 @@ It unpacks `.tar.gz` backups, removes unwanted `INSERT` data for selected tables
   - `.json`
   - `.conf/.ini`
 - Supports combined configuration sources (file + env + CLI overrides).
+- Current runtime I/O works with local filesystem paths; S3 object I/O is planned as a separate task.
 
 ## ⚙️ Configuration sources (strategy)
 The app uses layered config with strategy selection:
@@ -115,6 +116,22 @@ sudo systemctl enable --now mysql-dump-cleaner.timer
 - ⏳ Refactor deeper into reusable packages.
 - ⏳ Support other SQL dialects (PostgreSQL, MSSQL, etc).
 - ⏳ Support more dump formats (plain SQL, CSV, binary).
+
+
+## ✅ Task итог (pre-merge summary)
+What is implemented in this iteration:
+- Refactored runtime into explicit packages (`internal/app`, `internal/config`, `internal/pipeline`, `internal/filter`) and reduced `main.go` to bootstrap + graceful shutdown.
+- Added schedule mode (`MODE=schedule`, `SCHEDULE_EVERY`) and runtime flags for operational control.
+- Added strategy-based layered config (defaults -> file -> env -> CLI) with format support: YAML/TOML/JSON/CONF.
+- Added stress dump generator `cmd/dumpgen` with 1GB-scale targets, multi-table generation, random payloads, and deterministic seed support.
+- Added deployment artifacts for container and system scheduler (`Dockerfile`, `docker-compose.yml`, `deploy/systemd/*`).
+- Added/updated tests for config/filter/generator behavior.
+
+Current limitation to keep in mind before merge:
+- Native S3 read/write in application runtime is not implemented yet (MinIO is present in infra examples, but app I/O path is currently local FS).
+
+Recommended next PR:
+- Add universal storage backend API and implement `s3://bucket/key` input/output using AWS SDK v2 with MinIO-compatible endpoint/path-style options.
 
 ## 📜 License
 MIT.
