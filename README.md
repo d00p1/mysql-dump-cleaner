@@ -5,24 +5,48 @@ It unpacks `.tar.gz` backups, removes unwanted `INSERT` data for selected tables
 ## 🚀 Features
 - Streams dump files line-by-line.
 - Handles very large SQL lines with configurable memory limits (`MAX_LINE_BYTES`).
-- Works with local filesystem paths.
 - Runs once or as an internal scheduler (`MODE=schedule`, `SCHEDULE_EVERY=...`).
 - Supports deployment as:
   - a containerized scheduler,
   - a scheduler near a dedicated S3 service (e.g. MinIO),
   - a system scheduler via `systemd` timer.
+- Supports multiple configuration formats through strategy-based loading:
+  - `.yaml/.yml`
+  - `.toml`
+  - `.json`
+  - `.conf/.ini`
+- Supports combined configuration sources (file + env + CLI overrides).
 
-## ⚙️ Configuration
-Use `.env` or environment variables:
+## ⚙️ Configuration sources (strategy)
+The app uses layered config with strategy selection:
+1. defaults,
+2. config file (`--config` + `--config-format`),
+3. environment variables,
+4. CLI flags (highest priority).
 
+CLI switches for strategy:
+- `--config ./examples/config.yaml`
+- `--config-format auto|yaml|toml|json|conf`
+- `--config-strategy merge|file-only|env-only`
+
+Default strategy is `merge`.
+
+### Environment variables
 ```env
 DUMPFILE="./data/source.tar.gz"
 OUTPUT_FILE="./output/filtered_result.tar.gz"
-TABLE_MAP="^tmp_:^log_"                      # colon-separated regex patterns
+TABLE_MAP="^tmp_:^log_"
 TMP_DIR="./tmp"
 MAX_LINE_BYTES=8388608
-MODE="once"                                  # once | schedule
-SCHEDULE_EVERY="1h"                          # required for schedule mode
+MODE="once"
+SCHEDULE_EVERY="1h"
+```
+
+### Combined configuration example
+Keep operational logic in YAML, and secrets/urgent overrides in env:
+
+```bash
+MODE=once TABLE_MAP='^tmp_:^audit_' go run . --config ./examples/config.yaml
 ```
 
 ## 🗂️ CLI usage
@@ -65,6 +89,8 @@ sudo systemctl enable --now mysql-dump-cleaner.timer
 ### 🛠️ Planned / progress
 - ✅ Make a smaller CLI app with runtime flags.
 - ✅ Add configuration validation (required fields, values, regex validation).
+- ✅ Add strategy-based configuration loading from yaml/toml/json/conf.
+- ✅ Add combined config mode (file + env + CLI).
 - ✅ Extend platform usage: local, container scheduler, system scheduler.
 - ✅ Make utility ready for use inside Docker containers.
 - ✅ Add flexible run modes with dynamic scheduling configuration.
