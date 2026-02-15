@@ -9,7 +9,6 @@ import (
 	"strings"
 )
 
-
 func Pack(src string, writer io.WriteCloser) error {
 
 	if _, err := os.Stat(src); err != nil {

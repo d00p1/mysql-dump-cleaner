@@ -1,0 +1,11 @@
+[Unit]
+Description=Schedule mysql dump cleaner
+
+[Timer]
+OnBootSec=5m
+OnUnitActiveSec=1h
+Unit=mysql-dump-cleaner.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target
