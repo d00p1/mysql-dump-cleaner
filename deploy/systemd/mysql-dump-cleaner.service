@@ -1,0 +1,9 @@
+[Unit]
+Description=MySQL dump cleaner one-shot run
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/mysql-dump-cleaner
+EnvironmentFile=/opt/mysql-dump-cleaner/.env
+ExecStart=/usr/local/bin/mysql-dump-cleaner --mode once
