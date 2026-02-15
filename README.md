@@ -64,14 +64,17 @@ Useful flags:
 For stress testing in near-real conditions, use the built-in generator:
 
 ```bash
-go run ./cmd/dumpgen --output ./data/generated_dump_1gb.tar.gz --target-size 1GB --table bench_data
+go run ./cmd/dumpgen --output ./data/generated_dump_1gb.tar.gz --target-size 1GB --tables users,orders,events
 ```
 
-This creates a `.tar.gz` archive with `dump.sql` inside, containing `CREATE TABLE` and many `INSERT` statements until the SQL payload reaches the target size.
+This creates a `.tar.gz` archive with `dump.sql` inside, containing multiple `CREATE TABLE` and batched `INSERT` statements until the SQL payload reaches the target size. Payload values are random alphanumeric strings (not constant `x`).
 
 Useful tuning flags:
+- `--tables` (comma-separated list, e.g. `users,orders,events`)
+- `--table` (legacy alias for single table)
 - `--rows-per-insert` (default `1000`)
 - `--value-size` (default `128`)
+- `--seed` (optional random seed for reproducible data)
 - `--target-size` supports `MB/GB` and `MiB/GiB`
 
 ## 🐳 Run in Docker (scheduler + standalone S3 service)

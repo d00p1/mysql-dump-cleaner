@@ -5,29 +5,42 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/d00p1/filtrate-backups/pkg/archive"
 )
+
+const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func main() {
 	var (
 		output        string
 		tableName     string
+		tablesRaw     string
 		targetSizeRaw string
 		rowsPerInsert int
 		valueSize     int
+		seed          int64
 	)
 
 	flag.StringVar(&output, "output", "./data/generated_dump_1gb.tar.gz", "output tar.gz path")
-	flag.StringVar(&tableName, "table", "bench_data", "table name for generated INSERTs")
+	flag.StringVar(&tableName, "table", "bench_data", "table name for generated INSERTs (legacy alias)")
+	flag.StringVar(&tablesRaw, "tables", "", "comma-separated table names, e.g. users,orders,events")
 	flag.StringVar(&targetSizeRaw, "target-size", "1GB", "target SQL payload size (e.g. 1GB, 1024MB, 500MiB)")
 	flag.IntVar(&rowsPerInsert, "rows-per-insert", 1000, "rows per INSERT statement")
 	flag.IntVar(&valueSize, "value-size", 128, "string payload size per row")
+	flag.Int64Var(&seed, "seed", time.Now().UnixNano(), "random seed for payload generation")
 	flag.Parse()
+
+	tables := parseTables(tablesRaw)
+	if len(tables) == 0 {
+		tables = []string{strings.TrimSpace(tableName)}
+	}
 
 	targetBytes, err := parseSize(targetSizeRaw)
 	if err != nil {
@@ -39,22 +52,48 @@ func main() {
 		fmt.Println("Error: rows-per-insert and value-size must be > 0")
 		os.Exit(1)
 	}
+	if len(tables) == 0 || tables[0] == "" {
+		fmt.Println("Error: at least one table is required")
+		os.Exit(1)
+	}
 
 	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
 		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
 
-	sqlBytes, err := generateTarGz(output, tableName, targetBytes, rowsPerInsert, valueSize)
+	rng := rand.New(rand.NewSource(seed))
+	sqlBytes, err := generateTarGz(output, tables, targetBytes, rowsPerInsert, valueSize, rng)
 	if err != nil {
 		fmt.Println("Error:", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ generated: %s (sql bytes: %d)\n", output, sqlBytes)
+	fmt.Printf("✅ generated: %s (sql bytes: %d, tables: %d, seed: %d)\n", output, sqlBytes, len(tables), seed)
 }
 
-func generateTarGz(output, tableName string, targetBytes int64, rowsPerInsert, valueSize int) (int64, error) {
+func parseTables(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	tables := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		t := strings.TrimSpace(part)
+		if t == "" {
+			continue
+		}
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		tables = append(tables, t)
+		seen[t] = struct{}{}
+	}
+	return tables
+}
+
+func generateTarGz(output string, tables []string, targetBytes int64, rowsPerInsert, valueSize int, rng *rand.Rand) (int64, error) {
 	tmpDir, err := os.MkdirTemp("", "dumpgen-")
 	if err != nil {
 		return 0, fmt.Errorf("create temp dir: %w", err)
@@ -67,7 +106,7 @@ func generateTarGz(output, tableName string, targetBytes int64, rowsPerInsert, v
 		return 0, fmt.Errorf("create temp sql: %w", err)
 	}
 
-	sqlBytes, err := writeSQL(sqlFile, tableName, targetBytes, rowsPerInsert, valueSize)
+	sqlBytes, err := writeSQL(sqlFile, tables, targetBytes, rowsPerInsert, valueSize, rng)
 	if closeErr := sqlFile.Close(); closeErr != nil && err == nil {
 		err = closeErr
 	}
@@ -89,20 +128,30 @@ func generateTarGz(output, tableName string, targetBytes int64, rowsPerInsert, v
 	return sqlBytes, nil
 }
 
-func writeSQL(w io.Writer, tableName string, targetBytes int64, rowsPerInsert, valueSize int) (int64, error) {
-	base := "CREATE TABLE `" + tableName + "` (id BIGINT PRIMARY KEY, payload TEXT);\n"
-	n, err := io.WriteString(w, base)
-	if err != nil {
-		return 0, fmt.Errorf("write ddl: %w", err)
+func writeSQL(w io.Writer, tables []string, targetBytes int64, rowsPerInsert, valueSize int, rng *rand.Rand) (int64, error) {
+	var written int64
+	for _, tableName := range tables {
+		base := "CREATE TABLE `" + tableName + "` (id BIGINT PRIMARY KEY, payload TEXT);\n"
+		n, err := io.WriteString(w, base)
+		if err != nil {
+			return written, fmt.Errorf("write ddl: %w", err)
+		}
+		written += int64(n)
 	}
 
-	payload := strings.Repeat("x", valueSize)
-	written := int64(n)
-	var id int64 = 1
+	ids := make([]int64, len(tables))
+	for i := range ids {
+		ids[i] = 1
+	}
 
+	tableIdx := 0
 	for written < targetBytes {
+		tableName := tables[tableIdx%len(tables)]
+		tablePos := tableIdx % len(tables)
+		tableIdx++
+
 		var b strings.Builder
-		b.Grow(rowsPerInsert * (valueSize + 32))
+		b.Grow(rowsPerInsert * (valueSize + 48))
 		b.WriteString("INSERT INTO `")
 		b.WriteString(tableName)
 		b.WriteString("` VALUES ")
@@ -111,11 +160,11 @@ func writeSQL(w io.Writer, tableName string, targetBytes int64, rowsPerInsert, v
 				b.WriteString(",")
 			}
 			b.WriteString("(")
-			b.WriteString(strconv.FormatInt(id, 10))
+			b.WriteString(strconv.FormatInt(ids[tablePos], 10))
 			b.WriteString(",'")
-			b.WriteString(payload)
+			b.WriteString(randomString(rng, valueSize))
 			b.WriteString("')")
-			id++
+			ids[tablePos]++
 		}
 		b.WriteString(";\n")
 
@@ -128,6 +177,14 @@ func writeSQL(w io.Writer, tableName string, targetBytes int64, rowsPerInsert, v
 	}
 
 	return written, nil
+}
+
+func randomString(rng *rand.Rand, length int) string {
+	buf := make([]byte, length)
+	for i := range buf {
+		buf[i] = alphabet[rng.Intn(len(alphabet))]
+	}
+	return string(buf)
 }
 
 func parseSize(raw string) (int64, error) {
