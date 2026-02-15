@@ -59,6 +59,21 @@ Useful flags:
 - `--every 30m`
 - `--max-line-bytes 16777216`
 
+
+## 🧪 Large dump generator (1GB)
+For stress testing in near-real conditions, use the built-in generator:
+
+```bash
+go run ./cmd/dumpgen --output ./data/generated_dump_1gb.tar.gz --target-size 1GB --table bench_data
+```
+
+This creates a `.tar.gz` archive with `dump.sql` inside, containing `CREATE TABLE` and many `INSERT` statements until the SQL payload reaches the target size.
+
+Useful tuning flags:
+- `--rows-per-insert` (default `1000`)
+- `--value-size` (default `128`)
+- `--target-size` supports `MB/GB` and `MiB/GiB`
+
 ## 🐳 Run in Docker (scheduler + standalone S3 service)
 1. Fill `.env`.
 2. Start stack:
